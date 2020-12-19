@@ -1,12 +1,12 @@
 from datetime import datetime
 import pandas as pd
 import geopandas as gpd
-from shapely.geometry import LineString, Polygon
+from shapely.geometry import LineString, Polygon, MultiPolygon
 
 
 def make_time(row):
     datetime_str = str(row["date_begin"]) + str(row["time_begin"])
-    return pd.datetime.strptime(datetime_str, "%y%m%d%H%M%S").replace(second=0)
+    return pd.datetime.strptime(datetime_str, "%y%m%d%H%M%S")
 
 
 def make_line(row):
@@ -50,6 +50,10 @@ class So6:
         self.df = df.copy()  # copy used to export
 
         df.loc[:, "t"] = df.apply(make_time, axis=1)
+        df.drop_duplicates(
+            ["t", "trajectory_id"], inplace=True
+        )  # no filtering normally
+
         lat_lon_cols = ["lat_begin", "lon_begin", "lat_end", "lon_end"]
         df.loc[:, lat_lon_cols] = df[lat_lon_cols].apply(lambda x: x / 60)
         cols_to_drop = [
@@ -79,11 +83,10 @@ class So6:
         self.trajs = self.gdf.dissolve(by="trajectory_id")
 
     def clip(self, polygon_list):
-        self.ids = set()
-        for polygon in polygon_list:
-            intersection = self.trajs.intersects(polygon)
-            interesecting_flights = intersection[intersection]  # Series
-            self.ids.update(set(interesecting_flights.index))
+        multipoly = MultiPolygon(polygon_list)
+        intersection = self.trajs.intersects(multipoly)
+        intersecting_flights = intersection[intersection]  # Series
+        self.ids = set(intersecting_flights.index)
         print(f"Nb of trajs intersecting polygons: {len(self.ids)}")
         return
 
